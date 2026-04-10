@@ -391,19 +391,40 @@ async function handleRegenerate(key, smsId, emailId) {
 
 async function handleSend(key, channels, smsId, emailId, firstName) {
   try {
+    // Send SMS via ClickSend if requested
     if (channels.includes("sms") && smsId) {
-      await supaFetch("outreach_drafts?id=eq." + smsId, { method: "PATCH", body: JSON.stringify({ status: "approved", sent_at: new Date().toISOString() }) });
+      var smsRes = await fetch(SUPABASE_URL + "/functions/v1/send-outreach", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ draft_id: smsId }),
+      });
+      var smsData = await smsRes.json();
+      if (smsData.error) {
+        showToast("SMS failed: " + smsData.error, "error");
+        return;
+      }
     }
+
+    // Mark email as approved (no auto-send yet)
     if (channels.includes("email") && emailId) {
-      await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "approved", sent_at: new Date().toISOString() }) });
+      await supaFetch("outreach_drafts?id=eq." + emailId, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "approved", sent_at: new Date().toISOString() }),
+      });
     }
+
+    // Skip the channels not selected
     if (!channels.includes("sms") && smsId) {
       await supaFetch("outreach_drafts?id=eq." + smsId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
     }
     if (!channels.includes("email") && emailId) {
       await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
     }
-    showToast("Approved " + channels.join(" & ") + " for " + firstName);
+
+    showToast((channels.includes("sms") ? "SMS sent" : "Approved") + " for " + firstName);
     loadDrafts();
   } catch (e) {
     showToast(e.message, "error");
