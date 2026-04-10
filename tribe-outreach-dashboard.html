@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tribe Outreach Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'DM Sans', system-ui, sans-serif; background: #f1f5f9; min-height: 100vh; }
+
+/* Auth Screen */
+.auth-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #0f172a, #1e293b); }
+.auth-card { background: #fff; border-radius: 16px; padding: 48px 40px; text-align: center; width: 380px; box-shadow: 0 25px 50px rgba(0,0,0,0.25); }
+.logo-mark { width: 56px; height: 56px; border-radius: 14px; background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #fff; font-size: 28px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px; }
+.auth-title { font-size: 24px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
+.auth-subtitle { font-size: 14px; color: #64748b; margin-bottom: 24px; }
+.auth-input { width: 100%; padding: 12px 16px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 14px; outline: none; margin-bottom: 16px; font-family: inherit; transition: border-color 0.2s; }
+.auth-input:focus { border-color: #0ea5e9; }
+.auth-button { width: 100%; padding: 12px; background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #fff; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.auth-button:hover { opacity: 0.9; }
+.auth-error { color: #dc2626; font-size: 13px; margin-top: 8px; }
+
+/* Dashboard */
+.dashboard { display: none; }
+.header { background: #0f172a; padding: 28px 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+.header-title { color: #fff; font-size: 22px; font-weight: 700; }
+.header-subtitle { color: #94a3b8; font-size: 14px; margin-top: 4px; }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.filter-select { padding: 8px 12px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 13px; cursor: pointer; outline: none; font-family: inherit; }
+.refresh-btn { padding: 8px 16px; border-radius: 8px; border: 1px solid #334155; background: transparent; color: #94a3b8; font-size: 13px; cursor: pointer; font-family: inherit; }
+.refresh-btn:hover { background: #1e293b; }
+
+/* Toast */
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 10px; color: #fff; font-size: 14px; font-weight: 500; z-index: 1000; box-shadow: 0 8px 24px rgba(0,0,0,0.15); transform: translateY(-20px); opacity: 0; transition: all 0.3s; pointer-events: none; }
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success { background: #16a34a; }
+.toast.error { background: #dc2626; }
+
+/* Cards */
+.card-list { max-width: 720px; margin: 24px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 20px; }
+.empty-state { text-align: center; padding: 80px 20px; color: #64748b; font-size: 16px; }
+.empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+
+.card { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04); overflow: hidden; }
+.card-header { padding: 20px 24px 12px; display: flex; justify-content: space-between; align-items: flex-start; }
+.customer-name { font-size: 18px; font-weight: 700; color: #0f172a; }
+.customer-meta { font-size: 13px; color: #64748b; margin-top: 4px; }
+.badge { padding: 4px 12px; border-radius: 20px; background: #f0f9ff; color: #0369a1; font-size: 12px; font-weight: 600; }
+
+.context-bar { padding: 0 24px 16px; display: flex; flex-wrap: wrap; gap: 6px; }
+.context-chip { padding: 3px 10px; border-radius: 6px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 500; }
+.context-chip.stage { background: #fef3c7; color: #92400e; }
+
+.message-block { padding: 16px 24px; border-top: 1px solid #f1f5f9; }
+.message-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.channel-tag { padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
+.channel-tag.sms { background: #dcfce7; color: #166534; }
+.channel-tag.email { background: #dbeafe; color: #1e40af; }
+
+.edit-btn { padding: 4px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; color: #475569; font-size: 12px; cursor: pointer; font-family: inherit; }
+.edit-btn:hover { background: #f8fafc; }
+
+.message-text { font-size: 14px; line-height: 1.6; color: #334155; white-space: pre-wrap; }
+.subject-line { font-size: 13px; font-weight: 600; color: #1e40af; margin-bottom: 8px; }
+
+.edit-subject { width: 100%; padding: 10px 12px; border: 2px solid #0ea5e9; border-radius: 8px; font-size: 14px; color: #334155; outline: none; margin-bottom: 8px; font-family: inherit; }
+.edit-textarea { width: 100%; padding: 12px; border: 2px solid #0ea5e9; border-radius: 8px; font-size: 14px; line-height: 1.6; color: #334155; resize: vertical; outline: none; font-family: inherit; }
+.char-count { font-size: 12px; color: #94a3b8; margin-top: 6px; text-align: right; }
+
+/* Action Bar */
+.action-bar { padding: 16px 24px 20px; border-top: 1px solid #f1f5f9; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.skip-btn, .regen-btn { padding: 8px 16px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
+.skip-btn:hover, .regen-btn:hover { background: #f8fafc; }
+.send-group { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.send-sms { padding: 8px 16px; border-radius: 8px; border: none; background: #dcfce7; color: #166534; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.send-email { padding: 8px 16px; border-radius: 8px; border: none; background: #dbeafe; color: #1e40af; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.send-both { padding: 8px 16px; border-radius: 8px; border: none; background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.send-sms:hover, .send-email:hover, .send-both:hover { opacity: 0.85; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@media (max-width: 600px) {
+  .auth-card { width: 90%; padding: 32px 24px; }
+  .header { padding: 20px 16px; }
+  .card-header { padding: 16px 16px 10px; }
+  .context-bar { padding: 0 16px 12px; }
+  .message-block { padding: 12px 16px; }
+  .action-bar { padding: 12px 16px 16px; }
+  .send-group { margin-left: 0; width: 100%; }
+  .send-sms, .send-email, .send-both { flex: 1; text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<!-- Auth Screen -->
+<div class="auth-container" id="authScreen">
+  <div class="auth-card">
+    <div class="logo-mark">T</div>
+    <h1 class="auth-title">Tribe Outreach</h1>
+    <p class="auth-subtitle">Enter your Supabase service role key</p>
+    <input type="password" id="apiKeyInput" class="auth-input" placeholder="service_role key">
+    <button class="auth-button" onclick="connect()">Connect</button>
+    <div class="auth-error" id="authError"></div>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div class="dashboard" id="dashboard">
+  <header class="header">
+    <div>
+      <h1 class="header-title">Tribe Outreach</h1>
+      <p class="header-subtitle" id="draftCount">Loading...</p>
+    </div>
+    <div class="header-actions">
+      <select class="filter-select" id="filterSelect" onchange="loadDrafts()">
+        <option value="draft">Drafts</option>
+        <option value="approved">Approved</option>
+        <option value="skipped">Skipped</option>
+        <option value="sent">Sent</option>
+      </select>
+      <button class="refresh-btn" onclick="loadDrafts()">↻ Refresh</button>
+    </div>
+  </header>
+  <div class="card-list" id="cardList"></div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://qcxwyhszeynjkxfedxhm.supabase.co";
+let API_KEY = "";
+let currentDrafts = [];
+let editingId = null;
+
+function showToast(msg, type = "success") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = "toast show " + type;
+  setTimeout(() => el.className = "toast", 3500);
+}
+
+async function supaFetch(path, options = {}) {
+  const res = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
+    ...options,
+    headers: {
+      apikey: API_KEY,
+      Authorization: "Bearer " + API_KEY,
+      "Content-Type": "application/json",
+      Prefer: options.prefer || "return=representation",
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function connect() {
+  API_KEY = document.getElementById("apiKeyInput").value.trim();
+  if (!API_KEY) return;
+  try {
+    await supaFetch("outreach_drafts?limit=1");
+    document.getElementById("authScreen").style.display = "none";
+    document.getElementById("dashboard").style.display = "block";
+    showToast("Connected to Supabase");
+    loadDrafts();
+  } catch (e) {
+    document.getElementById("authError").textContent = "Invalid API key. Use the service_role key.";
+  }
+}
+
+document.getElementById("apiKeyInput").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") connect();
+});
+
+async function loadDrafts() {
+  const filter = document.getElementById("filterSelect").value;
+  const cardList = document.getElementById("cardList");
+  cardList.innerHTML = '<div class="empty-state">Loading...</div>';
+
+  try {
+    const data = await supaFetch(
+      "outreach_drafts?select=*,customers(first_name,last_name,email,phone)&status=eq." + filter + "&order=created_at.desc"
+    );
+    currentDrafts = data || [];
+
+    const groups = {};
+    currentDrafts.forEach(d => {
+      const key = d.customer_id + "-" + d.purchase_id;
+      if (!groups[key]) {
+        groups[key] = {
+          customer_id: d.customer_id,
+          purchase_id: d.purchase_id,
+          customer: d.customers,
+          context: d.customer_context || {},
+          sms: null,
+          email: null,
+        };
+      }
+      if (d.channel === "sms") groups[key].sms = d;
+      if (d.channel === "email") groups[key].email = d;
+    });
+
+    const grouped = Object.values(groups);
+    document.getElementById("draftCount").textContent = grouped.length + " " + (filter === "draft" ? "pending review" : filter);
+
+    if (grouped.length === 0) {
+      cardList.innerHTML = '<div class="empty-state"><div class="empty-icon">✓</div><p>No ' + filter + ' messages</p></div>';
+      return;
+    }
+
+    cardList.innerHTML = grouped.map(g => renderCard(g, filter)).join("");
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+}
+
+function renderCard(group, filter) {
+  const c = group.customer || {};
+  const ctx = group.context || {};
+  const key = group.customer_id + "-" + group.purchase_id;
+  const isTrialOffer = ctx.offer_type && ctx.offer_type.includes("Trial");
+
+  let contextChips = "";
+  if (isTrialOffer) {
+    contextChips = `
+      <span class="context-chip">${ctx.total_visits || 0} visits</span>
+      <span class="context-chip">Day ${ctx.days_into_trial || "?"}/14</span>
+      <span class="context-chip">→ ${ctx.recommended_plan || "—"}</span>
+    `;
+  } else {
+    contextChips = `
+      <span class="context-chip">${ctx.sessions_used || 0} of ${(ctx.sessions_used || 0) + (ctx.sessions_remaining || 0)} used</span>
+      <span class="context-chip">${ctx.visit_frequency || "—"}</span>
+      <span class="context-chip">→ ${ctx.recommended_product || "—"}</span>
+      <span class="context-chip">${ctx.recommended_membership || "—"}</span>
+    `;
+  }
+
+  let smsBlock = "";
+  if (group.sms) {
+    smsBlock = `
+      <div class="message-block">
+        <div class="message-label">
+          <span class="channel-tag sms">SMS</span>
+          ${filter === "draft" ? `<button class="edit-btn" onclick="toggleEdit('${group.sms.id}', 'sms')">Edit</button>` : ""}
+        </div>
+        <div id="sms-display-${group.sms.id}">
+          <p class="message-text">${escapeHtml(group.sms.message)}</p>
+        </div>
+        <div id="sms-edit-${group.sms.id}" style="display:none">
+          <textarea class="edit-textarea" id="sms-textarea-${group.sms.id}" rows="4">${escapeHtml(group.sms.message)}</textarea>
+          <div class="char-count" id="sms-chars-${group.sms.id}"></div>
+          <button class="edit-btn" style="margin-top:8px" onclick="saveEdit('${group.sms.id}', 'sms')">Save</button>
+        </div>
+      </div>
+    `;
+  }
+
+  let emailBlock = "";
+  if (group.email) {
+    emailBlock = `
+      <div class="message-block">
+        <div class="message-label">
+          <span class="channel-tag email">EMAIL</span>
+          ${filter === "draft" ? `<button class="edit-btn" onclick="toggleEdit('${group.email.id}', 'email')">Edit</button>` : ""}
+        </div>
+        <div id="email-display-${group.email.id}">
+          ${group.email.subject ? `<p class="subject-line">Subject: ${escapeHtml(group.email.subject)}</p>` : ""}
+          <p class="message-text">${escapeHtml(group.email.message)}</p>
+        </div>
+        <div id="email-edit-${group.email.id}" style="display:none">
+          <input class="edit-subject" id="email-subject-${group.email.id}" value="${escapeHtml(group.email.subject || "")}" placeholder="Subject line">
+          <textarea class="edit-textarea" id="email-textarea-${group.email.id}" rows="6">${escapeHtml(group.email.message)}</textarea>
+          <button class="edit-btn" style="margin-top:8px" onclick="saveEdit('${group.email.id}', 'email')">Save</button>
+        </div>
+      </div>
+    `;
+  }
+
+  let actionBar = "";
+  if (filter === "draft") {
+    actionBar = `
+      <div class="action-bar">
+        <button class="skip-btn" onclick="handleSkip('${key}', '${group.sms?.id || ""}', '${group.email?.id || ""}')">Skip</button>
+        <button class="regen-btn" onclick="handleRegenerate('${key}', '${group.sms?.id || ""}', '${group.email?.id || ""}')">↻ Regenerate</button>
+        <div class="send-group">
+          <button class="send-sms" ${!group.sms ? "disabled" : ""} onclick="handleSend('${key}', ['sms'], '${group.sms?.id || ""}', '${group.email?.id || ""}', '${escapeHtml(c.first_name || "")}')">Send SMS</button>
+          <button class="send-email" ${!group.email ? "disabled" : ""} onclick="handleSend('${key}', ['email'], '${group.sms?.id || ""}', '${group.email?.id || ""}', '${escapeHtml(c.first_name || "")}')">Send Email</button>
+          <button class="send-both" ${!group.sms && !group.email ? "disabled" : ""} onclick="handleSend('${key}', ['sms','email'], '${group.sms?.id || ""}', '${group.email?.id || ""}', '${escapeHtml(c.first_name || "")}')">Send Both</button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="card" id="card-${key}">
+      <div class="card-header">
+        <div>
+          <h2 class="customer-name">${escapeHtml(c.first_name || "")} ${escapeHtml(c.last_name || "")}</h2>
+          <div class="customer-meta">${escapeHtml(c.email || "")} · ${escapeHtml(c.phone || "")}</div>
+        </div>
+        <div class="badge">${isTrialOffer ? "Trial" : "5-Pack"}</div>
+      </div>
+      <div class="context-bar">
+        ${contextChips}
+        <span class="context-chip stage">${ctx.outreach_stage || "—"}</span>
+      </div>
+      ${smsBlock}
+      ${emailBlock}
+      ${actionBar}
+    </div>
+  `;
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+function toggleEdit(id, channel) {
+  const display = document.getElementById(channel + "-display-" + id);
+  const edit = document.getElementById(channel + "-edit-" + id);
+  if (edit.style.display === "none") {
+    display.style.display = "none";
+    edit.style.display = "block";
+    if (channel === "sms") updateCharCount(id);
+  } else {
+    display.style.display = "block";
+    edit.style.display = "none";
+  }
+}
+
+function updateCharCount(id) {
+  const textarea = document.getElementById("sms-textarea-" + id);
+  const counter = document.getElementById("sms-chars-" + id);
+  if (textarea && counter) {
+    const len = textarea.value.length;
+    counter.textContent = len + " chars · " + Math.ceil(len / 160) + " SMS";
+    textarea.oninput = () => {
+      const l = textarea.value.length;
+      counter.textContent = l + " chars · " + Math.ceil(l / 160) + " SMS";
+    };
+  }
+}
+
+async function saveEdit(id, channel) {
+  try {
+    const updates = {};
+    if (channel === "sms") {
+      updates.message = document.getElementById("sms-textarea-" + id).value;
+    } else {
+      updates.message = document.getElementById("email-textarea-" + id).value;
+      updates.subject = document.getElementById("email-subject-" + id).value;
+    }
+    await supaFetch("outreach_drafts?id=eq." + id, { method: "PATCH", body: JSON.stringify(updates) });
+    showToast("Draft updated");
+    loadDrafts();
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+}
+
+async function handleSkip(key, smsId, emailId) {
+  try {
+    if (smsId) await supaFetch("outreach_drafts?id=eq." + smsId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
+    if (emailId) await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
+    showToast("Skipped");
+    loadDrafts();
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+}
+
+async function handleRegenerate(key, smsId, emailId) {
+  try {
+    if (smsId) await supaFetch("outreach_drafts?id=eq." + smsId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
+    if (emailId) await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
+    await fetch(SUPABASE_URL + "/functions/v1/generate-outreach", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + API_KEY, "Content-Type": "application/json" },
+      body: "{}",
+    });
+    showToast("Regenerating...");
+    setTimeout(loadDrafts, 3000);
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+}
+
+async function handleSend(key, channels, smsId, emailId, firstName) {
+  try {
+    if (channels.includes("sms") && smsId) {
+      await supaFetch("outreach_drafts?id=eq." + smsId, { method: "PATCH", body: JSON.stringify({ status: "approved", sent_at: new Date().toISOString() }) });
+    }
+    if (channels.includes("email") && emailId) {
+      await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "approved", sent_at: new Date().toISOString() }) });
+    }
+    if (!channels.includes("sms") && smsId) {
+      await supaFetch("outreach_drafts?id=eq." + smsId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
+    }
+    if (!channels.includes("email") && emailId) {
+      await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
+    }
+    showToast("Approved " + channels.join(" & ") + " for " + firstName);
+    loadDrafts();
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+}
+</script>
+</body>
+</html>
