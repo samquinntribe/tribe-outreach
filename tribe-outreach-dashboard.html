@@ -48,9 +48,28 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: #f1f5f9; min-h
 .customer-meta { font-size: 13px; color: #64748b; margin-top: 4px; }
 .badge { padding: 4px 12px; border-radius: 20px; background: #f0f9ff; color: #0369a1; font-size: 12px; font-weight: 600; }
 
-.context-bar { padding: 0 24px 16px; display: flex; flex-wrap: wrap; gap: 6px; }
+.context-bar { padding: 0 24px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .context-chip { padding: 3px 10px; border-radius: 6px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 500; }
 .context-chip.stage { background: #fef3c7; color: #92400e; }
+
+/* Sessions Button & Panel */
+.sessions-toggle { padding: 3px 10px; border-radius: 6px; border: 1px solid #c7d2fe; background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+.sessions-toggle:hover { background: #c7d2fe; }
+.sessions-toggle.active { background: #4338ca; color: #fff; border-color: #4338ca; }
+
+.sessions-panel { display: none; padding: 0 24px 16px; }
+.sessions-panel.open { display: block; }
+.sessions-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sessions-table th { text-align: left; padding: 8px 10px; background: #f8fafc; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; }
+.sessions-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+.sessions-table tr:last-child td { border-bottom: none; }
+.tier-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block; }
+.tier-badge.off-peak { background: #dcfce7; color: #166534; }
+.tier-badge.platinum { background: #fae8ff; color: #86198f; }
+.sessions-loading { padding: 16px; text-align: center; color: #94a3b8; font-size: 13px; }
+.sessions-summary { display: flex; gap: 12px; margin-top: 10px; padding: 10px 12px; background: #f8fafc; border-radius: 8px; flex-wrap: wrap; }
+.sessions-summary-item { font-size: 12px; color: #475569; }
+.sessions-summary-item strong { color: #0f172a; }
 
 .message-block { padding: 16px 24px; border-top: 1px solid #f1f5f9; }
 .message-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -88,6 +107,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   .action-bar { padding: 12px 16px 16px; }
   .send-group { margin-left: 0; width: 100%; }
   .send-sms, .send-email, .send-both { flex: 1; text-align: center; }
+  .sessions-panel { padding: 0 16px 12px; }
+  .sessions-table th, .sessions-table td { padding: 6px 6px; font-size: 11px; }
 }
 </style>
 </head>
@@ -95,7 +116,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 <div class="toast" id="toast"></div>
 
-<!-- Auth Screen -->
 <div class="auth-container" id="authScreen">
   <div class="auth-card">
     <div class="logo-mark">T</div>
@@ -107,7 +127,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   </div>
 </div>
 
-<!-- Dashboard -->
 <div class="dashboard" id="dashboard">
   <header class="header">
     <div>
@@ -128,31 +147,34 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 </div>
 
 <script>
-const SUPABASE_URL = "https://qcxwyhszeynjkxfedxhm.supabase.co";
-let API_KEY = "";
-let currentDrafts = [];
-let editingId = null;
+var SUPABASE_URL = "https://qcxwyhszeynjkxfedxhm.supabase.co";
+var API_KEY = "";
+var currentDrafts = [];
+var editingId = null;
+var DAY_NAMES = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function showToast(msg, type = "success") {
-  const el = document.getElementById("toast");
+function showToast(msg, type) {
+  type = type || "success";
+  var el = document.getElementById("toast");
   el.textContent = msg;
   el.className = "toast show " + type;
-  setTimeout(() => el.className = "toast", 3500);
+  setTimeout(function() { el.className = "toast"; }, 3500);
 }
 
-async function supaFetch(path, options = {}) {
-  const res = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
-    ...options,
+async function supaFetch(path, options) {
+  options = options || {};
+  var res = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
+    method: options.method || "GET",
     headers: {
       apikey: API_KEY,
       Authorization: "Bearer " + API_KEY,
       "Content-Type": "application/json",
       Prefer: options.prefer || "return=representation",
-      ...(options.headers || {}),
     },
+    body: options.body || undefined,
   });
   if (!res.ok) throw new Error(await res.text());
-  const text = await res.text();
+  var text = await res.text();
   return text ? JSON.parse(text) : null;
 }
 
@@ -175,19 +197,19 @@ document.getElementById("apiKeyInput").addEventListener("keydown", function(e) {
 });
 
 async function loadDrafts() {
-  const filter = document.getElementById("filterSelect").value;
-  const cardList = document.getElementById("cardList");
+  var filter = document.getElementById("filterSelect").value;
+  var cardList = document.getElementById("cardList");
   cardList.innerHTML = '<div class="empty-state">Loading...</div>';
 
   try {
-    const data = await supaFetch(
+    var data = await supaFetch(
       "outreach_drafts?select=*,customers(first_name,last_name,email,phone)&status=eq." + filter + "&order=created_at.desc"
     );
     currentDrafts = data || [];
 
-    const groups = {};
-    currentDrafts.forEach(d => {
-      const key = d.customer_id + "-" + d.purchase_id;
+    var groups = {};
+    currentDrafts.forEach(function(d) {
+      var key = d.customer_id + "-" + d.purchase_id;
       if (!groups[key]) {
         groups[key] = {
           customer_id: d.customer_id,
@@ -202,7 +224,7 @@ async function loadDrafts() {
       if (d.channel === "email") groups[key].email = d;
     });
 
-    const grouped = Object.values(groups);
+    var grouped = Object.values(groups);
     document.getElementById("draftCount").textContent = grouped.length + " " + (filter === "draft" ? "pending review" : filter);
 
     if (grouped.length === 0) {
@@ -210,108 +232,191 @@ async function loadDrafts() {
       return;
     }
 
-    cardList.innerHTML = grouped.map(g => renderCard(g, filter)).join("");
+    cardList.innerHTML = grouped.map(function(g) { return renderCard(g, filter); }).join("");
   } catch (e) {
     showToast(e.message, "error");
   }
 }
 
+function formatTime12(time24) {
+  if (!time24) return "—";
+  var parts = time24.split(":");
+  var h = parseInt(parts[0]);
+  var m = parts[1];
+  var ampm = h >= 12 ? "PM" : "AM";
+  if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  return h + ":" + m + " " + ampm;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  var d = new Date(dateStr + "T00:00:00");
+  var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return months[d.getMonth()] + " " + d.getDate();
+}
+
 function renderCard(group, filter) {
-  const c = group.customer || {};
-  const ctx = group.context || {};
-  const key = group.customer_id + "-" + group.purchase_id;
-  const isTrialOffer = ctx.offer_type && ctx.offer_type.includes("Trial");
+  var c = group.customer || {};
+  var ctx = group.context || {};
+  var key = group.customer_id + "-" + group.purchase_id;
+  var isTrialOffer = ctx.offer_type && ctx.offer_type.indexOf("Trial") !== -1;
 
-  let contextChips = "";
+  var contextChips = "";
   if (isTrialOffer) {
-    contextChips = `
-      <span class="context-chip">${ctx.total_visits || 0} visits</span>
-      <span class="context-chip">Day ${ctx.days_into_trial || "?"}/14</span>
-      <span class="context-chip">→ ${ctx.recommended_plan || "—"}</span>
-    `;
+    contextChips =
+      '<span class="context-chip">' + (ctx.total_visits || 0) + ' visits</span>' +
+      '<span class="context-chip">Day ' + (ctx.days_into_trial || "?") + '/14</span>' +
+      '<span class="context-chip">→ ' + (ctx.recommended_plan || "—") + '</span>';
   } else {
-    contextChips = `
-      <span class="context-chip">${ctx.sessions_used || 0} of ${(ctx.sessions_used || 0) + (ctx.sessions_remaining || 0)} used</span>
-      <span class="context-chip">${ctx.visit_frequency || "—"}</span>
-      <span class="context-chip">→ ${ctx.recommended_product || "—"}</span>
-      <span class="context-chip">${ctx.recommended_membership || "—"}</span>
-    `;
+    contextChips =
+      '<span class="context-chip">' + (ctx.sessions_used || 0) + ' of ' + ((ctx.sessions_used || 0) + (ctx.sessions_remaining || 0)) + ' used</span>' +
+      '<span class="context-chip">' + (ctx.visit_frequency || "—") + '</span>' +
+      '<span class="context-chip">→ ' + (ctx.recommended_product || "—") + '</span>' +
+      '<span class="context-chip">' + (ctx.recommended_membership || "—") + '</span>';
   }
 
-  let smsBlock = "";
+  var smsBlock = "";
   if (group.sms) {
-    smsBlock = `
-      <div class="message-block">
-        <div class="message-label">
-          <span class="channel-tag sms">SMS</span>
-          ${filter === "draft" ? `<button class="edit-btn" onclick="toggleEdit('${group.sms.id}', 'sms')">Edit</button>` : ""}
-        </div>
-        <div id="sms-display-${group.sms.id}">
-          <p class="message-text">${escapeHtml(group.sms.message)}</p>
-        </div>
-        <div id="sms-edit-${group.sms.id}" style="display:none">
-          <textarea class="edit-textarea" id="sms-textarea-${group.sms.id}" rows="4">${escapeHtml(group.sms.message)}</textarea>
-          <div class="char-count" id="sms-chars-${group.sms.id}"></div>
-          <button class="edit-btn" style="margin-top:8px" onclick="saveEdit('${group.sms.id}', 'sms')">Save</button>
-        </div>
-      </div>
-    `;
+    smsBlock =
+      '<div class="message-block">' +
+        '<div class="message-label">' +
+          '<span class="channel-tag sms">SMS</span>' +
+          (filter === "draft" ? '<button class="edit-btn" onclick="toggleEdit(\'' + group.sms.id + '\', \'sms\')">Edit</button>' : "") +
+        '</div>' +
+        '<div id="sms-display-' + group.sms.id + '">' +
+          '<p class="message-text">' + escapeHtml(group.sms.message) + '</p>' +
+        '</div>' +
+        '<div id="sms-edit-' + group.sms.id + '" style="display:none">' +
+          '<textarea class="edit-textarea" id="sms-textarea-' + group.sms.id + '" rows="4">' + escapeHtml(group.sms.message) + '</textarea>' +
+          '<div class="char-count" id="sms-chars-' + group.sms.id + '"></div>' +
+          '<button class="edit-btn" style="margin-top:8px" onclick="saveEdit(\'' + group.sms.id + '\', \'sms\')">Save</button>' +
+        '</div>' +
+      '</div>';
   }
 
-  let emailBlock = "";
+  var emailBlock = "";
   if (group.email) {
-    emailBlock = `
-      <div class="message-block">
-        <div class="message-label">
-          <span class="channel-tag email">EMAIL</span>
-          ${filter === "draft" ? `<button class="edit-btn" onclick="toggleEdit('${group.email.id}', 'email')">Edit</button>` : ""}
-        </div>
-        <div id="email-display-${group.email.id}">
-          ${group.email.subject ? `<p class="subject-line">Subject: ${escapeHtml(group.email.subject)}</p>` : ""}
-          <p class="message-text">${escapeHtml(group.email.message)}</p>
-        </div>
-        <div id="email-edit-${group.email.id}" style="display:none">
-          <input class="edit-subject" id="email-subject-${group.email.id}" value="${escapeHtml(group.email.subject || "")}" placeholder="Subject line">
-          <textarea class="edit-textarea" id="email-textarea-${group.email.id}" rows="6">${escapeHtml(group.email.message)}</textarea>
-          <button class="edit-btn" style="margin-top:8px" onclick="saveEdit('${group.email.id}', 'email')">Save</button>
-        </div>
-      </div>
-    `;
+    emailBlock =
+      '<div class="message-block">' +
+        '<div class="message-label">' +
+          '<span class="channel-tag email">EMAIL</span>' +
+          (filter === "draft" ? '<button class="edit-btn" onclick="toggleEdit(\'' + group.email.id + '\', \'email\')">Edit</button>' : "") +
+        '</div>' +
+        '<div id="email-display-' + group.email.id + '">' +
+          (group.email.subject ? '<p class="subject-line">Subject: ' + escapeHtml(group.email.subject) + '</p>' : "") +
+          '<p class="message-text">' + escapeHtml(group.email.message) + '</p>' +
+        '</div>' +
+        '<div id="email-edit-' + group.email.id + '" style="display:none">' +
+          '<input class="edit-subject" id="email-subject-' + group.email.id + '" value="' + escapeHtml(group.email.subject || "") + '" placeholder="Subject line">' +
+          '<textarea class="edit-textarea" id="email-textarea-' + group.email.id + '" rows="6">' + escapeHtml(group.email.message) + '</textarea>' +
+          '<button class="edit-btn" style="margin-top:8px" onclick="saveEdit(\'' + group.email.id + '\', \'email\')">Save</button>' +
+        '</div>' +
+      '</div>';
   }
 
-  let actionBar = "";
+  var smsId = group.sms ? group.sms.id : "";
+  var emailId = group.email ? group.email.id : "";
+  var firstName = escapeHtml(c.first_name || "");
+
+  var actionBar = "";
   if (filter === "draft") {
-    actionBar = `
-      <div class="action-bar">
-        <button class="skip-btn" onclick="handleSkip('${key}', '${group.sms?.id || ""}', '${group.email?.id || ""}')">Skip</button>
-        <button class="regen-btn" onclick="handleRegenerate('${key}', '${group.sms?.id || ""}', '${group.email?.id || ""}')">↻ Regenerate</button>
-        <div class="send-group">
-          <button class="send-sms" ${!group.sms ? "disabled" : ""} onclick="handleSend('${key}', ['sms'], '${group.sms?.id || ""}', '${group.email?.id || ""}', '${escapeHtml(c.first_name || "")}')">Send SMS</button>
-          <button class="send-email" ${!group.email ? "disabled" : ""} onclick="handleSend('${key}', ['email'], '${group.sms?.id || ""}', '${group.email?.id || ""}', '${escapeHtml(c.first_name || "")}')">Send Email</button>
-          <button class="send-both" ${!group.sms && !group.email ? "disabled" : ""} onclick="handleSend('${key}', ['sms','email'], '${group.sms?.id || ""}', '${group.email?.id || ""}', '${escapeHtml(c.first_name || "")}')">Send Both</button>
-        </div>
-      </div>
-    `;
+    actionBar =
+      '<div class="action-bar">' +
+        '<button class="skip-btn" onclick="handleSkip(\'' + key + '\', \'' + smsId + '\', \'' + emailId + '\')">Skip</button>' +
+        '<button class="regen-btn" onclick="handleRegenerate(\'' + key + '\', \'' + smsId + '\', \'' + emailId + '\')">↻ Regenerate</button>' +
+        '<div class="send-group">' +
+          '<button class="send-sms" ' + (!group.sms ? "disabled" : "") + ' onclick="handleSend(\'' + key + '\', [\'sms\'], \'' + smsId + '\', \'' + emailId + '\', \'' + firstName + '\')">Send SMS</button>' +
+          '<button class="send-email" ' + (!group.email ? "disabled" : "") + ' onclick="handleSend(\'' + key + '\', [\'email\'], \'' + smsId + '\', \'' + emailId + '\', \'' + firstName + '\')">Send Email</button>' +
+          '<button class="send-both" ' + (!group.sms && !group.email ? "disabled" : "") + ' onclick="handleSend(\'' + key + '\', [\'sms\',\'email\'], \'' + smsId + '\', \'' + emailId + '\', \'' + firstName + '\')">Send Both</button>' +
+        '</div>' +
+      '</div>';
   }
 
-  return `
-    <div class="card" id="card-${key}">
-      <div class="card-header">
-        <div>
-          <h2 class="customer-name">${escapeHtml(c.first_name || "")} ${escapeHtml(c.last_name || "")}</h2>
-          <div class="customer-meta">${escapeHtml(c.email || "")} · ${escapeHtml(c.phone || "")}</div>
-        </div>
-        <div class="badge">${isTrialOffer ? "Trial" : "5-Pack"}</div>
-      </div>
-      <div class="context-bar">
-        ${contextChips}
-        <span class="context-chip stage">${ctx.outreach_stage || "—"}</span>
-      </div>
-      ${smsBlock}
-      ${emailBlock}
-      ${actionBar}
-    </div>
-  `;
+  return '<div class="card" id="card-' + key + '">' +
+    '<div class="card-header">' +
+      '<div>' +
+        '<h2 class="customer-name">' + escapeHtml(c.first_name || "") + ' ' + escapeHtml(c.last_name || "") + '</h2>' +
+        '<div class="customer-meta">' + escapeHtml(c.email || "") + ' · ' + escapeHtml(c.phone || "") + '</div>' +
+      '</div>' +
+      '<div class="badge">' + (isTrialOffer ? "Trial" : "5-Pack") + '</div>' +
+    '</div>' +
+    '<div class="context-bar">' +
+      contextChips +
+      '<span class="context-chip stage">' + (ctx.outreach_stage || "—") + '</span>' +
+      '<button class="sessions-toggle" id="sess-btn-' + key + '" onclick="toggleSessions(\'' + key + '\', \'' + group.customer_id + '\', \'' + group.purchase_id + '\')">▶ Sessions</button>' +
+    '</div>' +
+    '<div class="sessions-panel" id="sess-panel-' + key + '">' +
+      '<div class="sessions-loading">Loading sessions...</div>' +
+    '</div>' +
+    smsBlock +
+    emailBlock +
+    actionBar +
+  '</div>';
+}
+
+async function toggleSessions(key, customerId, purchaseId) {
+  var panel = document.getElementById("sess-panel-" + key);
+  var btn = document.getElementById("sess-btn-" + key);
+
+  if (panel.classList.contains("open")) {
+    panel.classList.remove("open");
+    btn.classList.remove("active");
+    btn.textContent = "▶ Sessions";
+    return;
+  }
+
+  panel.classList.add("open");
+  btn.classList.add("active");
+  btn.textContent = "▼ Sessions";
+  panel.innerHTML = '<div class="sessions-loading">Loading sessions...</div>';
+
+  try {
+    var visits = await supaFetch(
+      "visits?customer_id=eq." + customerId + "&purchase_id=eq." + purchaseId + "&order=visit_date.desc,visit_time.desc"
+    );
+
+    if (!visits || visits.length === 0) {
+      panel.innerHTML = '<div class="sessions-loading">No sessions recorded yet</div>';
+      return;
+    }
+
+    var offPeakCount = 0;
+    var platinumCount = 0;
+    var rows = "";
+
+    visits.forEach(function(v) {
+      var tierClass = v.access_tier_required === "off_peak" ? "off-peak" : "platinum";
+      var tierLabel = v.access_tier_required === "off_peak" ? "Off Peak" : "Platinum";
+      if (v.access_tier_required === "off_peak") offPeakCount++; else platinumCount++;
+
+      rows += '<tr>' +
+        '<td>' + formatDate(v.visit_date) + '</td>' +
+        '<td>' + DAY_NAMES[v.visit_dow] + '</td>' +
+        '<td>' + formatTime12(v.visit_time) + '</td>' +
+        '<td>' + escapeHtml(v.session_slot || "—") + '</td>' +
+        '<td><span class="tier-badge ' + tierClass + '">' + tierLabel + '</span></td>' +
+        '</tr>';
+    });
+
+    var summaryNote = platinumCount === 0
+      ? '<span class="sessions-summary-item" style="color:#166534">✓ All visits fit Off Peak</span>'
+      : '<span class="sessions-summary-item" style="color:#86198f">' + platinumCount + ' visit' + (platinumCount > 1 ? 's' : '') + ' outside Off Peak hours</span>';
+
+    panel.innerHTML =
+      '<table class="sessions-table">' +
+        '<thead><tr><th>Date</th><th>Day</th><th>Time</th><th>Session</th><th>Access Tier</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>' +
+      '<div class="sessions-summary">' +
+        '<span class="sessions-summary-item"><strong>' + visits.length + '</strong> total visits</span>' +
+        '<span class="sessions-summary-item"><strong>' + offPeakCount + '</strong> off peak</span>' +
+        '<span class="sessions-summary-item"><strong>' + platinumCount + '</strong> platinum-only</span>' +
+        summaryNote +
+      '</div>';
+  } catch (e) {
+    panel.innerHTML = '<div class="sessions-loading" style="color:#dc2626">Failed to load sessions</div>';
+  }
 }
 
 function escapeHtml(str) {
@@ -320,8 +425,8 @@ function escapeHtml(str) {
 }
 
 function toggleEdit(id, channel) {
-  const display = document.getElementById(channel + "-display-" + id);
-  const edit = document.getElementById(channel + "-edit-" + id);
+  var display = document.getElementById(channel + "-display-" + id);
+  var edit = document.getElementById(channel + "-edit-" + id);
   if (edit.style.display === "none") {
     display.style.display = "none";
     edit.style.display = "block";
@@ -333,13 +438,13 @@ function toggleEdit(id, channel) {
 }
 
 function updateCharCount(id) {
-  const textarea = document.getElementById("sms-textarea-" + id);
-  const counter = document.getElementById("sms-chars-" + id);
+  var textarea = document.getElementById("sms-textarea-" + id);
+  var counter = document.getElementById("sms-chars-" + id);
   if (textarea && counter) {
-    const len = textarea.value.length;
+    var len = textarea.value.length;
     counter.textContent = len + " chars · " + Math.ceil(len / 160) + " SMS";
-    textarea.oninput = () => {
-      const l = textarea.value.length;
+    textarea.oninput = function() {
+      var l = textarea.value.length;
       counter.textContent = l + " chars · " + Math.ceil(l / 160) + " SMS";
     };
   }
@@ -347,7 +452,7 @@ function updateCharCount(id) {
 
 async function saveEdit(id, channel) {
   try {
-    const updates = {};
+    var updates = {};
     if (channel === "sms") {
       updates.message = document.getElementById("sms-textarea-" + id).value;
     } else {
@@ -391,8 +496,7 @@ async function handleRegenerate(key, smsId, emailId) {
 
 async function handleSend(key, channels, smsId, emailId, firstName) {
   try {
-    // Send SMS via ClickSend if requested
-    if (channels.includes("sms") && smsId) {
+    if (channels.indexOf("sms") !== -1 && smsId) {
       var smsRes = await fetch(SUPABASE_URL + "/functions/v1/send-outreach", {
         method: "POST",
         headers: {
@@ -408,23 +512,21 @@ async function handleSend(key, channels, smsId, emailId, firstName) {
       }
     }
 
-    // Mark email as approved (no auto-send yet)
-    if (channels.includes("email") && emailId) {
+    if (channels.indexOf("email") !== -1 && emailId) {
       await supaFetch("outreach_drafts?id=eq." + emailId, {
         method: "PATCH",
         body: JSON.stringify({ status: "approved", sent_at: new Date().toISOString() }),
       });
     }
 
-    // Skip the channels not selected
-    if (!channels.includes("sms") && smsId) {
+    if (channels.indexOf("sms") === -1 && smsId) {
       await supaFetch("outreach_drafts?id=eq." + smsId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
     }
-    if (!channels.includes("email") && emailId) {
+    if (channels.indexOf("email") === -1 && emailId) {
       await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
     }
 
-    showToast((channels.includes("sms") ? "SMS sent" : "Approved") + " for " + firstName);
+    showToast((channels.indexOf("sms") !== -1 ? "SMS sent" : "Approved") + " for " + firstName);
     loadDrafts();
   } catch (e) {
     showToast(e.message, "error");
