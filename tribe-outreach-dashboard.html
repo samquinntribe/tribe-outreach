@@ -49,12 +49,16 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: #f1f5f9; min-h
 .context-chip.stage { background: #fef3c7; color: #92400e; }
 .context-chip.outreach-count { background: #ede9fe; color: #5b21b6; }
 
-.sessions-toggle { padding: 3px 10px; border-radius: 6px; border: 1px solid #c7d2fe; background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; }
-.sessions-toggle:hover { background: #c7d2fe; }
-.sessions-toggle.active { background: #4338ca; color: #fff; border-color: #4338ca; }
+.dropdown-toggle { padding: 3px 10px; border-radius: 6px; border: 1px solid #c7d2fe; background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+.dropdown-toggle:hover { background: #c7d2fe; }
+.dropdown-toggle.active { background: #4338ca; color: #fff; border-color: #4338ca; }
+.dropdown-toggle.desc-toggle { border-color: #fbbf24; background: #fffbeb; color: #b45309; }
+.dropdown-toggle.desc-toggle:hover { background: #fef3c7; }
+.dropdown-toggle.desc-toggle.active { background: #b45309; color: #fff; border-color: #b45309; }
 
-.sessions-panel { display: none; padding: 0 24px 16px; }
-.sessions-panel.open { display: block; }
+.dropdown-panel { display: none; padding: 0 24px 16px; }
+.dropdown-panel.open { display: block; }
+
 .sessions-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .sessions-table th { text-align: left; padding: 8px 10px; background: #f8fafc; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; }
 .sessions-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; }
@@ -66,6 +70,8 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: #f1f5f9; min-h
 .sessions-summary { display: flex; gap: 12px; margin-top: 10px; padding: 10px 12px; background: #f8fafc; border-radius: 8px; flex-wrap: wrap; }
 .sessions-summary-item { font-size: 12px; color: #475569; }
 .sessions-summary-item strong { color: #0f172a; }
+
+.description-text { font-size: 13px; line-height: 1.6; color: #475569; padding: 12px 16px; background: #fffbeb; border-radius: 8px; border-left: 3px solid #f59e0b; }
 
 .message-block { padding: 16px 24px; border-top: 1px solid #f1f5f9; }
 .message-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -102,7 +108,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   .action-bar { padding: 12px 16px 16px; }
   .send-group { margin-left: 0; width: 100%; }
   .send-sms, .send-email, .send-both { flex: 1; text-align: center; }
-  .sessions-panel { padding: 0 16px 12px; }
+  .dropdown-panel { padding: 0 16px 12px; }
   .sessions-table th, .sessions-table td { padding: 6px 6px; font-size: 11px; }
 }
 </style>
@@ -175,7 +181,6 @@ async function connect() {
   var password = document.getElementById("passwordInput").value.trim();
   if (!password) return;
   document.getElementById("authError").textContent = "";
-
   try {
     var res = await fetch(SUPABASE_URL + "/functions/v1/dashboard-auth", {
       method: "POST",
@@ -183,12 +188,10 @@ async function connect() {
       body: JSON.stringify({ password: password }),
     });
     var data = await res.json();
-
     if (data.error) {
       document.getElementById("authError").textContent = data.error;
       return;
     }
-
     API_KEY = data.key;
     document.getElementById("authScreen").style.display = "none";
     document.getElementById("dashboard").style.display = "block";
@@ -207,37 +210,25 @@ async function loadDrafts() {
   var filter = document.getElementById("filterSelect").value;
   var cardList = document.getElementById("cardList");
   cardList.innerHTML = '<div class="empty-state">Loading...</div>';
-
   try {
     var data = await supaFetch(
       "outreach_drafts?select=*,customers(first_name,last_name,email,phone,outreach_count,last_outreach_date)&status=eq." + filter + "&order=created_at.desc"
     );
-
     var groups = {};
     (data || []).forEach(function(d) {
       var key = d.customer_id + "-" + d.purchase_id;
       if (!groups[key]) {
-        groups[key] = {
-          customer_id: d.customer_id,
-          purchase_id: d.purchase_id,
-          customer: d.customers,
-          context: d.customer_context || {},
-          sms: null,
-          email: null,
-        };
+        groups[key] = { customer_id: d.customer_id, purchase_id: d.purchase_id, customer: d.customers, context: d.customer_context || {}, sms: null, email: null };
       }
       if (d.channel === "sms") groups[key].sms = d;
       if (d.channel === "email") groups[key].email = d;
     });
-
     var grouped = Object.values(groups);
     document.getElementById("draftCount").textContent = grouped.length + " " + (filter === "draft" ? "pending review" : filter);
-
     if (grouped.length === 0) {
       cardList.innerHTML = '<div class="empty-state"><div class="empty-icon">✓</div><p>No ' + filter + ' messages</p></div>';
       return;
     }
-
     cardList.innerHTML = grouped.map(function(g) { return renderCard(g, filter); }).join("");
   } catch (e) {
     showToast(e.message, "error");
@@ -247,11 +238,9 @@ async function loadDrafts() {
 function formatTime12(time24) {
   if (!time24) return "—";
   var parts = time24.split(":");
-  var h = parseInt(parts[0]);
-  var m = parts[1];
+  var h = parseInt(parts[0]); var m = parts[1];
   var ampm = h >= 12 ? "PM" : "AM";
-  if (h > 12) h -= 12;
-  if (h === 0) h = 12;
+  if (h > 12) h -= 12; if (h === 0) h = 12;
   return h + ":" + m + " " + ampm;
 }
 
@@ -260,6 +249,21 @@ function formatDate(dateStr) {
   var d = new Date(dateStr + "T00:00:00");
   var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   return months[d.getMonth()] + " " + d.getDate();
+}
+
+function friendlyProduct(val) {
+  if (!val) return "—";
+  var map = {
+    "membership": "subscription",
+    "5_pack_or_10_pack": "5-pack or 10-pack",
+    "10_pack": "10-pack",
+    "20_pack": "20-pack",
+    "waiting_for_data": "gathering data",
+    "off_peak_125": "Off Peak sub",
+    "platinum_169": "Platinum sub",
+    "no_visits_yet": "no visits yet",
+  };
+  return map[val] || val;
 }
 
 function renderCard(group, filter) {
@@ -278,13 +282,13 @@ function renderCard(group, filter) {
     contextChips =
       '<span class="context-chip">' + (ctx.total_visits || 0) + ' visits</span>' +
       '<span class="context-chip">Day ' + (ctx.days_into_trial || "?") + '/14</span>' +
-      '<span class="context-chip">→ ' + (ctx.recommended_plan || "—") + '</span>';
+      '<span class="context-chip">→ ' + friendlyProduct(ctx.recommended_plan) + '</span>';
   } else {
     contextChips =
       '<span class="context-chip">' + (ctx.sessions_used || 0) + ' of ' + ((ctx.sessions_used || 0) + (ctx.sessions_remaining || 0)) + ' used</span>' +
-      '<span class="context-chip">' + (ctx.visit_frequency || "—") + '</span>' +
-      '<span class="context-chip">→ ' + (ctx.recommended_product || "—") + '</span>' +
-      '<span class="context-chip">' + (ctx.recommended_membership || "—") + '</span>';
+      '<span class="context-chip">' + (ctx.visit_frequency || "—").replace(/_/g, " ") + '</span>' +
+      '<span class="context-chip">→ ' + friendlyProduct(ctx.recommended_product) + '</span>' +
+      '<span class="context-chip">' + friendlyProduct(ctx.recommended_membership) + '</span>';
   }
 
   var smsBlock = "";
@@ -335,7 +339,7 @@ function renderCard(group, filter) {
     actionBar =
       '<div class="action-bar">' +
         '<button class="skip-btn" onclick="handleSkip(\'' + key + '\', \'' + smsId + '\', \'' + emailId + '\')">Skip</button>' +
-        '<button class="regen-btn" onclick="handleRegenerate(\'' + key + '\', \'' + smsId + '\', \'' + emailId + '\')">↻ Regenerate</button>' +
+        '<button class="regen-btn" onclick="handleRegenerate(\'' + key + '\', \'' + smsId + '\', \'' + emailId + '\', \'' + group.customer_id + '\')">↻ Regenerate</button>' +
         '<div class="send-group">' +
           '<button class="send-sms" ' + (!group.sms ? "disabled" : "") + ' onclick="handleSend(\'' + key + '\', [\'sms\'], \'' + smsId + '\', \'' + emailId + '\', \'' + firstName + '\', \'' + group.customer_id + '\')">Send SMS</button>' +
           '<button class="send-email" ' + (!group.email ? "disabled" : "") + ' onclick="handleSend(\'' + key + '\', [\'email\'], \'' + smsId + '\', \'' + emailId + '\', \'' + firstName + '\', \'' + group.customer_id + '\')">Send Email</button>' +
@@ -354,12 +358,16 @@ function renderCard(group, filter) {
     '</div>' +
     '<div class="context-bar">' +
       contextChips +
-      '<span class="context-chip stage">' + (ctx.outreach_stage || "—") + '</span>' +
+      '<span class="context-chip stage">' + (ctx.outreach_stage || "—").replace(/_/g, " ") + '</span>' +
       outreachInfo +
-      '<button class="sessions-toggle" id="sess-btn-' + key + '" onclick="toggleSessions(\'' + key + '\', \'' + group.customer_id + '\', \'' + group.purchase_id + '\')">▶ Sessions</button>' +
+      '<button class="dropdown-toggle" id="sess-btn-' + key + '" onclick="toggleSessions(\'' + key + '\', \'' + group.customer_id + '\', \'' + group.purchase_id + '\')">▶ Sessions</button>' +
+      '<button class="dropdown-toggle desc-toggle" id="desc-btn-' + key + '" onclick="toggleDescription(\'' + key + '\')">▶ Description</button>' +
     '</div>' +
-    '<div class="sessions-panel" id="sess-panel-' + key + '">' +
+    '<div class="dropdown-panel" id="sess-panel-' + key + '">' +
       '<div class="sessions-loading">Loading sessions...</div>' +
+    '</div>' +
+    '<div class="dropdown-panel" id="desc-panel-' + key + '">' +
+      '<div class="description-text">' + escapeHtml(ctx.description || "No description available. Regenerate the draft to generate one.") + '</div>' +
     '</div>' +
     smsBlock +
     emailBlock +
@@ -367,59 +375,51 @@ function renderCard(group, filter) {
   '</div>';
 }
 
+function toggleDescription(key) {
+  var panel = document.getElementById("desc-panel-" + key);
+  var btn = document.getElementById("desc-btn-" + key);
+  if (panel.classList.contains("open")) {
+    panel.classList.remove("open");
+    btn.classList.remove("active");
+    btn.textContent = "▶ Description";
+  } else {
+    panel.classList.add("open");
+    btn.classList.add("active");
+    btn.textContent = "▼ Description";
+  }
+}
+
 async function toggleSessions(key, customerId, purchaseId) {
   var panel = document.getElementById("sess-panel-" + key);
   var btn = document.getElementById("sess-btn-" + key);
-
   if (panel.classList.contains("open")) {
     panel.classList.remove("open");
     btn.classList.remove("active");
     btn.textContent = "▶ Sessions";
     return;
   }
-
   panel.classList.add("open");
   btn.classList.add("active");
   btn.textContent = "▼ Sessions";
   panel.innerHTML = '<div class="sessions-loading">Loading sessions...</div>';
-
   try {
-    var visits = await supaFetch(
-      "visits?customer_id=eq." + customerId + "&purchase_id=eq." + purchaseId + "&order=visit_date.desc,visit_time.desc"
-    );
-
+    var visits = await supaFetch("visits?customer_id=eq." + customerId + "&purchase_id=eq." + purchaseId + "&order=visit_date.desc,visit_time.desc");
     if (!visits || visits.length === 0) {
       panel.innerHTML = '<div class="sessions-loading">No sessions recorded yet</div>';
       return;
     }
-
-    var offPeakCount = 0;
-    var platinumCount = 0;
-    var rows = "";
-
+    var offPeakCount = 0; var platinumCount = 0; var rows = "";
     visits.forEach(function(v) {
       var tierClass = v.access_tier_required === "off_peak" ? "off-peak" : "platinum";
       var tierLabel = v.access_tier_required === "off_peak" ? "Off Peak" : "Platinum";
       if (v.access_tier_required === "off_peak") offPeakCount++; else platinumCount++;
-
-      rows += '<tr>' +
-        '<td>' + formatDate(v.visit_date) + '</td>' +
-        '<td>' + DAY_NAMES[v.visit_dow] + '</td>' +
-        '<td>' + formatTime12(v.visit_time) + '</td>' +
-        '<td>' + escapeHtml(v.session_slot || "—") + '</td>' +
-        '<td><span class="tier-badge ' + tierClass + '">' + tierLabel + '</span></td>' +
-        '</tr>';
+      rows += '<tr><td>' + formatDate(v.visit_date) + '</td><td>' + DAY_NAMES[v.visit_dow] + '</td><td>' + formatTime12(v.visit_time) + '</td><td>' + escapeHtml(v.session_slot || "—") + '</td><td><span class="tier-badge ' + tierClass + '">' + tierLabel + '</span></td></tr>';
     });
-
     var summaryNote = platinumCount === 0
       ? '<span class="sessions-summary-item" style="color:#166534">✓ All visits fit Off Peak</span>'
       : '<span class="sessions-summary-item" style="color:#86198f">' + platinumCount + ' visit' + (platinumCount > 1 ? 's' : '') + ' outside Off Peak hours</span>';
-
     panel.innerHTML =
-      '<table class="sessions-table">' +
-        '<thead><tr><th>Date</th><th>Day</th><th>Time</th><th>Session</th><th>Access Tier</th></tr></thead>' +
-        '<tbody>' + rows + '</tbody>' +
-      '</table>' +
+      '<table class="sessions-table"><thead><tr><th>Date</th><th>Day</th><th>Time</th><th>Session</th><th>Access Tier</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       '<div class="sessions-summary">' +
         '<span class="sessions-summary-item"><strong>' + visits.length + '</strong> total visits</span>' +
         '<span class="sessions-summary-item"><strong>' + offPeakCount + '</strong> off peak</span>' +
@@ -440,12 +440,10 @@ function toggleEdit(id, channel) {
   var display = document.getElementById(channel + "-display-" + id);
   var edit = document.getElementById(channel + "-edit-" + id);
   if (edit.style.display === "none") {
-    display.style.display = "none";
-    edit.style.display = "block";
+    display.style.display = "none"; edit.style.display = "block";
     if (channel === "sms") updateCharCount(id);
   } else {
-    display.style.display = "block";
-    edit.style.display = "none";
+    display.style.display = "block"; edit.style.display = "none";
   }
 }
 
@@ -455,28 +453,19 @@ function updateCharCount(id) {
   if (textarea && counter) {
     var len = textarea.value.length;
     counter.textContent = len + " chars · " + Math.ceil(len / 160) + " SMS";
-    textarea.oninput = function() {
-      var l = textarea.value.length;
-      counter.textContent = l + " chars · " + Math.ceil(l / 160) + " SMS";
-    };
+    textarea.oninput = function() { var l = textarea.value.length; counter.textContent = l + " chars · " + Math.ceil(l / 160) + " SMS"; };
   }
 }
 
 async function saveEdit(id, channel) {
   try {
     var updates = {};
-    if (channel === "sms") {
-      updates.message = document.getElementById("sms-textarea-" + id).value;
-    } else {
-      updates.message = document.getElementById("email-textarea-" + id).value;
-      updates.subject = document.getElementById("email-subject-" + id).value;
-    }
+    if (channel === "sms") { updates.message = document.getElementById("sms-textarea-" + id).value; }
+    else { updates.message = document.getElementById("email-textarea-" + id).value; updates.subject = document.getElementById("email-subject-" + id).value; }
     await supaFetch("outreach_drafts?id=eq." + id, { method: "PATCH", body: JSON.stringify(updates) });
     showToast("Draft updated");
     loadDrafts();
-  } catch (e) {
-    showToast(e.message, "error");
-  }
+  } catch (e) { showToast(e.message, "error"); }
 }
 
 async function handleSkip(key, smsId, emailId) {
@@ -485,74 +474,49 @@ async function handleSkip(key, smsId, emailId) {
     if (emailId) await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
     showToast("Skipped");
     loadDrafts();
-  } catch (e) {
-    showToast(e.message, "error");
-  }
+  } catch (e) { showToast(e.message, "error"); }
 }
 
-async function handleRegenerate(key, smsId, emailId) {
+async function handleRegenerate(key, smsId, emailId, customerId) {
   try {
     if (smsId) await supaFetch("outreach_drafts?id=eq." + smsId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
     if (emailId) await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
+    showToast("Regenerating...");
     await fetch(SUPABASE_URL + "/functions/v1/generate-outreach", {
       method: "POST",
       headers: { Authorization: "Bearer " + API_KEY, "Content-Type": "application/json" },
-      body: "{}",
+      body: JSON.stringify({ customer_id: customerId }),
     });
-    showToast("Regenerating...");
-    setTimeout(loadDrafts, 3000);
-  } catch (e) {
-    showToast(e.message, "error");
-  }
+    setTimeout(loadDrafts, 4000);
+  } catch (e) { showToast(e.message, "error"); }
 }
 
 async function handleSend(key, channels, smsId, emailId, firstName, customerId) {
   try {
-    // Send SMS via ClickSend if requested
     if (channels.indexOf("sms") !== -1 && smsId) {
       var smsRes = await fetch(SUPABASE_URL + "/functions/v1/send-outreach", {
         method: "POST",
-        headers: {
-          Authorization: "Bearer " + API_KEY,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: "Bearer " + API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({ draft_id: smsId, track_outreach: true }),
       });
       var smsData = await smsRes.json();
-      if (smsData.error) {
-        showToast("SMS failed: " + smsData.error, "error");
-        return;
-      }
+      if (smsData.error) { showToast("SMS failed: " + smsData.error, "error"); return; }
     }
-
-    // Mark email as approved
     if (channels.indexOf("email") !== -1 && emailId) {
-      await supaFetch("outreach_drafts?id=eq." + emailId, {
-        method: "PATCH",
-        body: JSON.stringify({ status: "approved", sent_at: new Date().toISOString() }),
-      });
-      // If only email (no SMS), track outreach here
+      await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "approved", sent_at: new Date().toISOString() }) });
       if (channels.indexOf("sms") === -1) {
-        await supaFetch("rpc/record_outreach", {
-          method: "POST",
-          body: JSON.stringify({ p_customer_id: customerId }),
-        });
+        await supaFetch("rpc/record_outreach", { method: "POST", body: JSON.stringify({ p_customer_id: customerId }) });
       }
     }
-
-    // Skip channels not selected
     if (channels.indexOf("sms") === -1 && smsId) {
       await supaFetch("outreach_drafts?id=eq." + smsId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
     }
     if (channels.indexOf("email") === -1 && emailId) {
       await supaFetch("outreach_drafts?id=eq." + emailId, { method: "PATCH", body: JSON.stringify({ status: "skipped" }) });
     }
-
     showToast((channels.indexOf("sms") !== -1 ? "SMS sent" : "Approved") + " for " + firstName);
     loadDrafts();
-  } catch (e) {
-    showToast(e.message, "error");
-  }
+  } catch (e) { showToast(e.message, "error"); }
 }
 </script>
 </body>
